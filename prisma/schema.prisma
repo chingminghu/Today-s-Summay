@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model DailyDigest {
+  id                 String   @id @default(cuid())
+  digestDate         String   @unique
+  dailySummary       String
+  generalSummary     String
+  sportsSummary      String
+  businessSummary    String
+  technologySummary  String
+  rawNewsJson        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
