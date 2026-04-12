@@ -1,9 +1,14 @@
-import { NextResponse } from "next/server";
-import { getLatestDigest } from "@/lib/digest";
+import { NextRequest, NextResponse } from "next/server";
+import { getDigestByDate, getLatestDigest } from "@/lib/digest";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const digest = await getLatestDigest();
+    const { searchParams } = new URL(req.url);
+    const date = searchParams.get("date");
+
+    const digest = date
+      ? await getDigestByDate(date)
+      : await getLatestDigest();
 
     if (!digest) {
       return NextResponse.json(
