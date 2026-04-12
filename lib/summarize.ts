@@ -79,6 +79,7 @@ export async function summarizeAllNews(news: CategorizedNews) {
     })
     .join("\n\n");
 
+  console.log("Generating daily summary...");
   const dailyResponse = await ai.models.generateContent({
     model: MODEL,
     contents: `

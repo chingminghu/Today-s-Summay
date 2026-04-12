@@ -4,6 +4,13 @@ const BASE_URL = "https://gnews.io/api/v4/top-headlines";
 
 const categories: CategoryKey[] = ["nation", "sports", "business", "technology"];
 
+function getDaysAgoISO(days: number = 1): string {
+  const now = new Date();
+  const past = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  return past.toISOString(); // e.g. 2026-04-11T10:00:00Z
+}
+
 function normalizeArticle(article: any, category: CategoryKey): NewsItem | null {
   if (!article?.title || !article?.url) return null;
 
@@ -29,8 +36,10 @@ async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
   url.searchParams.set("lang", "zh");
   url.searchParams.set("category", category);
   url.searchParams.set("max", "10");
+  url.searchParams.set("from", getDaysAgoISO(10));
   url.searchParams.set("apikey", apiKey);
 
+  console.log(`Fetching ${category} news from GNews API...`);
   const res = await fetch(url.toString(), {
     method: "GET",
     headers: {
@@ -38,6 +47,7 @@ async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
     },
     cache: "no-store",
   });
+  console.log(`GNews API response for ${category}:`, res.status);
 
   if (!res.ok) {
     const text = await res.text();
