@@ -1,4 +1,4 @@
-export type CategoryKey = "general" | "sports" | "business" | "technology";
+export type CategoryKey = "nation" | "sports" | "business" | "technology";
 
 export type NewsItem = {
   title: string;

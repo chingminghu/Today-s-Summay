@@ -20,7 +20,7 @@ export async function saveDailyDigest(input: SaveDigestInput) {
     where: { digestDate },
     update: {
       dailySummary,
-      generalSummary: summaries.general,
+      nationSummary: summaries.nation,
       sportsSummary: summaries.sports,
       businessSummary: summaries.business,
       technologySummary: summaries.technology,
@@ -29,7 +29,7 @@ export async function saveDailyDigest(input: SaveDigestInput) {
     create: {
       digestDate,
       dailySummary,
-      generalSummary: summaries.general,
+      nationSummary: summaries.nation,
       sportsSummary: summaries.sports,
       businessSummary: summaries.business,
       technologySummary: summaries.technology,

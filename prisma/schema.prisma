@@ -10,7 +10,7 @@ model DailyDigest {
   id                 String   @id @default(cuid())
   digestDate         String   @unique
   dailySummary       String
-  generalSummary     String
+  nationSummary      String
   sportsSummary      String
   businessSummary    String
   technologySummary  String

@@ -12,7 +12,7 @@ const ai = new GoogleGenAI({ apiKey });
 const MODEL = "gemini-2.5-flash";
 
 const categoryLabels: Record<CategoryKey, string> = {
-  general: "政治／綜合",
+  nation: "台灣政治／社會",
   sports: "體育",
   business: "財經",
   technology: "科技",

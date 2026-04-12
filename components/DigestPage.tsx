@@ -8,14 +8,14 @@ type Article = {
   url: string;
   source: string;
   publishedAt: string;
-  category: "general" | "sports" | "business" | "technology";
+  category: "nation" | "sports" | "business" | "technology";
 };
 
 type Digest = {
   id: string;
   digestDate: string;
   dailySummary: string;
-  generalSummary: string;
+  nationSummary: string;
   sportsSummary: string;
   businessSummary: string;
   technologySummary: string;
@@ -25,21 +25,21 @@ type Digest = {
 };
 
 const categoryTitles: Record<string, string> = {
-  general: "政治 / 綜合",
+  nation: "台灣政治／社會",
   sports: "體育",
   business: "財經",
   technology: "科技",
 };
 
 const categoryDescriptions: Record<string, string> = {
-  general: "國際局勢、政策與公共議題",
+  nation: "重要政治事件、社會議題與民生新聞",
   sports: "重要賽事、戰績與球員動態",
   business: "市場、企業與經濟焦點",
   technology: "AI、產品與科技發展",
 };
 
 const categoryAccent: Record<string, string> = {
-  general: "from-blue-500/20 to-cyan-500/10",
+  nation: "from-blue-500/20 to-cyan-500/10",
   sports: "from-emerald-500/20 to-lime-500/10",
   business: "from-amber-500/20 to-orange-500/10",
   technology: "from-fuchsia-500/20 to-violet-500/10",
@@ -58,7 +58,7 @@ export default function DigestPage() {
   const today = useMemo(() => getTaiwanDateString(), []);
   const [digest, setDigest] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
-  const [openCategory, setOpenCategory] = useState<string | null>("general");
+  const [openCategory, setOpenCategory] = useState<string | null>("nation");
   const [error, setError] = useState("");
 
   async function fetchDigest() {
@@ -94,7 +94,7 @@ export default function DigestPage() {
 
   const summaries = digest
     ? {
-        general: digest.generalSummary,
+        nation: digest.nationSummary,
         sports: digest.sportsSummary,
         business: digest.businessSummary,
         technology: digest.technologySummary,

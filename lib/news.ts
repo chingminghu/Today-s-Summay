@@ -1,8 +1,8 @@
 import { CategorizedNews, CategoryKey, NewsItem } from "./types";
 
-const BASE_URL = "https://newsapi.org/v2/top-headlines";
+const BASE_URL = "https://gnews.io/api/v4/top-headlines";
 
-const categories: CategoryKey[] = ["general", "sports", "business", "technology"];
+const categories: CategoryKey[] = ["nation", "sports", "business", "technology"];
 
 function normalizeArticle(article: any, category: CategoryKey): NewsItem | null {
   if (!article?.title || !article?.url) return null;
@@ -18,17 +18,18 @@ function normalizeArticle(article: any, category: CategoryKey): NewsItem | null 
 }
 
 async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
-  const apiKey = process.env.NEWS_API_KEY;
+  const apiKey = process.env.GNEWS_API_KEY;
 
   if (!apiKey) {
-    throw new Error("Missing NEWS_API_KEY in environment variables.");
+    throw new Error("Missing GNEWS_API_KEY in environment variables.");
   }
 
   const url = new URL(BASE_URL);
-  url.searchParams.set("country", "us");
+  url.searchParams.set("country", "tw");
+  url.searchParams.set("lang", "zh");
   url.searchParams.set("category", category);
-  url.searchParams.set("pageSize", "10");
-  url.searchParams.set("apiKey", apiKey);
+  url.searchParams.set("max", "10");
+  url.searchParams.set("apikey", apiKey);
 
   const res = await fetch(url.toString(), {
     method: "GET",
@@ -40,11 +41,10 @@ async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`NewsAPI request failed: ${res.status} ${text}`);
+    throw new Error(`GNews request failed: ${res.status} ${text}`);
   }
 
   const data = await res.json();
-
   const articles = Array.isArray(data.articles) ? data.articles : [];
 
   return articles
@@ -54,24 +54,22 @@ async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
 
 export async function fetchDailyNews(): Promise<CategorizedNews> {
   const result: CategorizedNews = {
-    general: [],
+    nation: [],
     sports: [],
     business: [],
     technology: [],
   };
 
-  const settled = await Promise.allSettled(
-    categories.map(async (category) => {
+  for (const category of categories) {
+    try {
       const items = await fetchCategoryNews(category);
-      return { category, items };
-    })
-  );
 
-  for (const item of settled) {
-    if (item.status === "fulfilled") {
-      result[item.value.category] = item.value.items;
-    } else {
-      console.error("Fetch category failed:", item.reason);
+      result[category] = items;
+
+      // 🔥 關鍵：加延遲
+      await new Promise((res) => setTimeout(res, 1500));
+    } catch (err) {
+      console.error("Fetch category failed:", err);
     }
   }
 
