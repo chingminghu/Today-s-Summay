@@ -1,15 +1,9 @@
 import { CategorizedNews, CategoryKey, NewsItem } from "./types";
+import { getDaysAgoISO } from "./utils";
 
 const BASE_URL = "https://gnews.io/api/v4/top-headlines";
 
 const categories: CategoryKey[] = ["nation", "sports", "business", "technology"];
-
-function getDaysAgoISO(days: number = 1): string {
-  const now = new Date();
-  const past = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-
-  return past.toISOString(); // e.g. 2026-04-11T10:00:00Z
-}
 
 function normalizeArticle(article: any, category: CategoryKey): NewsItem | null {
   if (!article?.title || !article?.url) return null;
@@ -63,12 +57,7 @@ async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
 }
 
 export async function fetchDailyNews(): Promise<CategorizedNews> {
-  const result: CategorizedNews = {
-    nation: [],
-    sports: [],
-    business: [],
-    technology: [],
-  };
+  const result: CategorizedNews = {};
 
   for (const category of categories) {
     try {

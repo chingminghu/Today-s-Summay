@@ -1,4 +1,4 @@
-export type CategoryKey = "nation" | "sports" | "business" | "technology";
+export type CategoryKey = "nation" | "world" | "sports" | "business" | "technology" | "entertainment";
 
 export type NewsItem = {
   title: string;
@@ -9,4 +9,4 @@ export type NewsItem = {
   category: CategoryKey;
 };
 
-export type CategorizedNews = Record<CategoryKey, NewsItem[]>;
+export type CategorizedNews = Partial<Record<CategoryKey, NewsItem[]>>;

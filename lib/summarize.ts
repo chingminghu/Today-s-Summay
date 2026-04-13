@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { categoryLabels } from "./utils"
 import { CategorizedNews, CategoryKey, NewsItem } from "./types";
 
 const apiKey = process.env.GEMINI_API_KEY;
@@ -11,12 +12,12 @@ const ai = new GoogleGenAI({ apiKey });
 
 const MODEL = "gemini-2.5-flash";
 
-const categoryLabels: Record<CategoryKey, string> = {
-  nation: "台灣政治／社會",
-  sports: "體育",
-  business: "財經",
-  technology: "科技",
-};
+// const categoryLabels: Record<CategoryKey, string> = {
+//   nation: "台灣政治／社會",
+//   sports: "體育",
+//   business: "財經",
+//   technology: "科技",
+// };
 
 function buildCategoryPrompt(category: CategoryKey, articles: NewsItem[]) {
   const label = categoryLabels[category];
@@ -69,8 +70,8 @@ export async function summarizeAllNews(news: CategorizedNews) {
   const summaries = {} as Record<CategoryKey, string>;
 
   for (const category of categories) {
-    console.log(`Summarizing category: ${category} with ${news[category].length} articles...`);
-    summaries[category] = await summarizeCategory(category, news[category]);
+    console.log(`Summarizing category: ${category} with ${news[category]?.length || 0} articles...`);
+    summaries[category] = await summarizeCategory(category, news[category] || []);
   }
 
   const combinedInput = categories
