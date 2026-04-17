@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { fetchDailyNews } from "@/lib/news";
-import { summarizeAllNews } from "@/lib/summarize";
+import { fetchDailyNews } from "@/lib/parseXML";
+import { summarizeAllNews } from "@/lib/summarizePerparagraph";
 import { saveDailyDigest } from "@/lib/digest";
 
 function getTaiwanDateString() {
