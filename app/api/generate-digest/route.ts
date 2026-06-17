@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchDailyNews } from "@/lib/news";
-import { summarizeAllNews } from "@/lib/summarize";
+import { reviewAndGroupNews, summarizeAllNews } from "@/lib/summarize";
 import { saveDailyDigest } from "@/lib/digest";
 
 function getTaiwanDateString() {
@@ -19,13 +19,14 @@ export async function POST() {
     const digestDate = getTaiwanDateString();
 
     const news = await fetchDailyNews();
-    const { summaries, dailySummary } = await summarizeAllNews(news);
+    const reviewedNews = await reviewAndGroupNews(news);
+    const { summaries, dailySummary } = await summarizeAllNews(reviewedNews);
 
     const saved = await saveDailyDigest({
       digestDate,
       dailySummary,
       summaries,
-      news,
+      news: reviewedNews,
     });
 
     return NextResponse.json({

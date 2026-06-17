@@ -1,11 +1,11 @@
 import { prisma } from "./prisma";
-import { CategorizedNews, CategoryKey } from "./types";
+import { CategoryKey, ReviewedCategorizedNews } from "./types";
 
 type SaveDigestInput = {
   digestDate: string;
   dailySummary: string;
   summaries: Record<CategoryKey, string>;
-  news: CategorizedNews;
+  news: ReviewedCategorizedNews;
 };
 
 export async function saveDailyDigest(input: SaveDigestInput) {

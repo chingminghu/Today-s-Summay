@@ -10,3 +10,16 @@ export type NewsItem = {
 };
 
 export type CategorizedNews = Record<CategoryKey, NewsItem[]>;
+
+export type ReviewedNewsItem = NewsItem & {
+  aiSummary: string;
+};
+
+export type NewsTopic = {
+  id: string;
+  title: string;
+  summary: string;
+  articles: ReviewedNewsItem[];
+};
+
+export type ReviewedCategorizedNews = Record<CategoryKey, NewsTopic[]>;

@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+type CategoryKey = "nation" | "sports" | "business" | "technology";
 
 type Article = {
   title: string;
@@ -8,8 +16,18 @@ type Article = {
   url: string;
   source: string;
   publishedAt: string;
-  category: "nation" | "sports" | "business" | "technology";
+  category: CategoryKey;
+  aiSummary?: string;
 };
+
+type NewsTopic = {
+  id: string;
+  title: string;
+  summary: string;
+  articles: Article[];
+};
+
+type RawNewsJson = Record<CategoryKey, NewsTopic[] | Article[]>;
 
 type Digest = {
   id: string;
@@ -19,27 +37,29 @@ type Digest = {
   sportsSummary: string;
   businessSummary: string;
   technologySummary: string;
-  rawNewsJson: Record<string, Article[]>;
+  rawNewsJson: RawNewsJson;
   createdAt: string;
   updatedAt: string;
 };
 
-const categoryTitles: Record<string, string> = {
-  nation: "台灣政治／社會",
+const categories: CategoryKey[] = ["nation", "sports", "business", "technology"];
+
+const categoryTitles: Record<CategoryKey, string> = {
+  nation: "台灣要聞",
   sports: "體育",
   business: "財經",
   technology: "科技",
 };
 
-const categoryDescriptions: Record<string, string> = {
-  nation: "重要政治事件、社會議題與民生新聞",
-  sports: "重要賽事、戰績與球員動態",
-  business: "市場、企業與經濟焦點",
-  technology: "AI、產品與科技發展",
+const categoryDescriptions: Record<CategoryKey, string> = {
+  nation: "政治、社會、民生與公共議題",
+  sports: "賽事、選手動態與運動產業",
+  business: "市場、產業、公司與經濟政策",
+  technology: "AI、半導體、產品與科技產業",
 };
 
-const categoryAccent: Record<string, string> = {
-  nation: "from-blue-500/20 to-cyan-500/10",
+const categoryAccent: Record<CategoryKey, string> = {
+  nation: "from-sky-500/20 to-cyan-500/10",
   sports: "from-emerald-500/20 to-lime-500/10",
   business: "from-amber-500/20 to-orange-500/10",
   technology: "from-fuchsia-500/20 to-violet-500/10",
@@ -54,14 +74,110 @@ function getTaiwanDateString() {
   }).format(new Date());
 }
 
+function isTopicList(items: NewsTopic[] | Article[] | undefined): items is NewsTopic[] {
+  return Array.isArray(items) && items.some((item) => "articles" in item);
+}
+
+function normalizeTopics(category: CategoryKey, rawNewsJson: RawNewsJson): NewsTopic[] {
+  const items = rawNewsJson[category] || [];
+
+  if (isTopicList(items)) {
+    return items;
+  }
+
+  return (items as Article[]).map((article, index) => ({
+    id: `${category}-${index + 1}`,
+    title: article.title,
+    summary: article.aiSummary || article.description || "此篇新聞暫無摘要。",
+    articles: [
+      {
+        ...article,
+        aiSummary: article.aiSummary || article.description || "此篇新聞暫無摘要。",
+      },
+    ],
+  }));
+}
+
+function countArticles(topics: NewsTopic[]) {
+  return topics.reduce((total, topic) => total + topic.articles.length, 0);
+}
+
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`(.*?)`/g, "$1")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .trim();
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={index} className="font-semibold text-white">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={index}
+          className="rounded bg-white/10 px-1.5 py-0.5 text-[0.92em] text-zinc-100"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    return part;
+  });
+}
+
+function MarkdownText({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  const blocks = text.trim().split(/\n{2,}/).filter(Boolean);
+
+  return (
+    <div className={className}>
+      {blocks.map((block, blockIndex) => {
+        const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+        const bulletLines = lines.filter((line) => /^[-*]\s+/.test(line));
+
+        if (bulletLines.length === lines.length && lines.length > 0) {
+          return (
+            <ul key={blockIndex} className="my-2 list-disc space-y-2 pl-5">
+              {lines.map((line, lineIndex) => (
+                <li key={lineIndex}>{renderInlineMarkdown(line.replace(/^[-*]\s+/, ""))}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={blockIndex} className={blockIndex > 0 ? "mt-3" : undefined}>
+            {renderInlineMarkdown(lines.join(" "))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DigestPage() {
   const today = useMemo(() => getTaiwanDateString(), []);
   const [digest, setDigest] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
-  const [openCategory, setOpenCategory] = useState<string | null>("nation");
+  const [openCategory, setOpenCategory] = useState<CategoryKey | null>("nation");
   const [error, setError] = useState("");
 
-  async function fetchDigest() {
+  const fetchDigest = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -76,21 +192,21 @@ export default function DigestPage() {
       }
 
       if (!res.ok) {
-        throw new Error("讀取摘要失敗");
+        throw new Error("讀取摘要失敗。");
       }
 
       const data = await res.json();
       setDigest(data.digest);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "發生錯誤");
+      setError(err instanceof Error ? err.message : "發生未知錯誤。");
     } finally {
       setLoading(false);
     }
-  }
+  }, [today]);
 
   useEffect(() => {
     fetchDigest();
-  }, [today]);
+  }, [fetchDigest]);
 
   const summaries = digest
     ? {
@@ -100,6 +216,18 @@ export default function DigestPage() {
         technology: digest.technologySummary,
       }
     : null;
+
+  const topicGroups = useMemo(() => {
+    if (!digest) return null;
+
+    return categories.reduce(
+      (acc, category) => {
+        acc[category] = normalizeTopics(category, digest.rawNewsJson);
+        return acc;
+      },
+      {} as Record<CategoryKey, NewsTopic[]>
+    );
+  }, [digest]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#18181b_0%,_#09090b_45%,_#000000_100%)] text-white">
@@ -115,7 +243,7 @@ export default function DigestPage() {
                 今日新聞摘要
               </h1>
               <p className="mt-3 text-base text-zinc-400 md:text-lg">
-                每日自動整理政治、體育、財經與科技重點
+                以台灣新聞為主，整理每日重點、事件脈絡與相關來源。
               </p>
             </div>
 
@@ -144,16 +272,16 @@ export default function DigestPage() {
               ))}
             </div>
           </section>
-        ) : !digest ? (
+        ) : !digest || !summaries || !topicGroups ? (
           <section className="rounded-[28px] border border-dashed border-white/15 bg-white/5 p-12 text-center backdrop-blur">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-2xl">
-              📰
+              +
             </div>
             <h2 className="mt-5 text-2xl font-semibold text-white">
-              今日摘要尚未生成
+              今天還沒有摘要
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-zinc-400">
-              系統目前尚未建立今天的摘要資料，等排程跑完後，這裡就會自動顯示最新內容。
+              產生今日摘要後，這裡會顯示各分類重點與整理後的小主題。
             </p>
           </section>
         ) : (
@@ -168,24 +296,26 @@ export default function DigestPage() {
                 </div>
 
                 <h2 className="text-2xl font-semibold text-white md:text-3xl">
-                  本日總覽
+                  今日總覽
                 </h2>
 
-                <p className="mt-5 max-w-4xl text-base leading-8 text-zinc-100 md:text-lg">
-                  {digest.dailySummary}
-                </p>
+                <MarkdownText
+                  text={digest.dailySummary}
+                  className="mt-5 max-w-4xl text-base leading-8 text-zinc-100 md:text-lg"
+                />
               </div>
             </section>
 
             <section className="mb-10">
-              <div className="mb-5 flex items-center justify-between">
+              <div className="mb-5 flex items-center justify-between gap-4">
                 <h2 className="text-2xl font-semibold text-white">分類摘要</h2>
-                <p className="text-sm text-zinc-500">點一下卡片可展開新聞列表</p>
+                <p className="text-sm text-zinc-500">點一下卡片可展開小主題</p>
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
-                {Object.entries(summaries!).map(([category, summary]) => {
+                {categories.map((category) => {
                   const isOpen = openCategory === category;
+                  const topics = topicGroups[category];
 
                   return (
                     <button
@@ -194,8 +324,8 @@ export default function DigestPage() {
                       onClick={() => setOpenCategory(isOpen ? null : category)}
                       className={`group relative overflow-hidden rounded-[26px] border p-6 text-left transition duration-300 ${
                         isOpen
-                          ? "border-white bg-white/15 shadow-[0_0_30px_rgba(255,255,255,0.15)] scale-[1.02]"
-                          : "border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10 hover:-translate-y-1"
+                          ? "scale-[1.02] border-white bg-white/15 shadow-[0_0_30px_rgba(255,255,255,0.15)]"
+                          : "border-white/10 bg-white/5 hover:-translate-y-1 hover:border-white/30 hover:bg-white/10"
                       }`}
                     >
                       <div
@@ -211,29 +341,24 @@ export default function DigestPage() {
                             </p>
                             <h3
                               className={`mt-2 text-2xl font-bold ${
-                                isOpen ? "text-white" : "text-zinc-200 group-hover:text-white"
+                                isOpen
+                                  ? "text-white"
+                                  : "text-zinc-200 group-hover:text-white"
                               }`}
                             >
                               {categoryTitles[category]}
                             </h3>
                           </div>
+                          <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-zinc-300">
+                            {topics.length} 主題 / {countArticles(topics)} 篇
+                          </div>
                         </div>
 
                         <p className="mt-5 text-sm leading-7 text-zinc-200 md:text-base">
-                          {String(summary).length > 80
-                            ? `${String(summary).slice(0, 80)}...`
-                            : String(summary)}
+                          {stripMarkdown(summaries[category]).length > 80
+                            ? `${stripMarkdown(summaries[category]).slice(0, 80)}...`
+                            : stripMarkdown(summaries[category])}
                         </p>
-
-                        <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-zinc-400 transition group-hover:text-white">
-                          <span>{isOpen ? "點擊收合內容" : "點擊查看完整摘要"}</span>
-                          <span
-                            className={`transition-transform duration-300 ${
-                              isOpen ? "rotate-90" : ""
-                            }`}
-                          >
-                          </span>
-                        </div>
                       </div>
                     </button>
                   );
@@ -243,63 +368,97 @@ export default function DigestPage() {
 
             <div
               className={`overflow-hidden transition-all duration-500 ease-in-out ${
-                openCategory ? "max-h-[4000px] opacity-100" : "max-h-0 opacity-0"
+                openCategory ? "max-h-[8000px] opacity-100" : "max-h-0 opacity-0"
               }`}
             >
               {openCategory && (
                 <section className="rounded-[28px] border border-white/10 bg-white/5 p-6 backdrop-blur md:p-8">
                   <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                     <div>
-                      <p className="text-sm text-zinc-400">詳細內容</p>
+                      <p className="text-sm text-zinc-400">整理後的小主題</p>
                       <h2 className="text-3xl font-bold text-white">
                         {categoryTitles[openCategory]}
                       </h2>
                     </div>
-                    <p className="text-sm text-zinc-500">完整摘要與前 5 則重點新聞</p>
-                  </div>
-            
-                  <div className="mb-6 rounded-[22px] border border-white/10 bg-white/10 p-5 md:p-6">
-                    <p className="mb-2 text-sm text-zinc-400">完整摘要</p>
-                    <p className="text-sm leading-8 text-zinc-100 md:text-base">
-                      {summaries?.[openCategory as keyof typeof summaries]}
+                    <p className="text-sm text-zinc-500">
+                      {topicGroups[openCategory].length} 個小主題，{countArticles(topicGroups[openCategory])} 篇新聞
                     </p>
                   </div>
-            
+
+                  <div className="mb-6 rounded-[22px] border border-white/10 bg-white/10 p-5 md:p-6">
+                    <p className="mb-2 text-sm text-zinc-400">分類摘要</p>
+                    <MarkdownText
+                      text={summaries[openCategory]}
+                      className="text-sm leading-8 text-zinc-100 md:text-base"
+                    />
+                  </div>
+
                   <div className="grid gap-5">
-                    {(digest.rawNewsJson[openCategory] || [])
-                      .slice(0, 5)
-                      .map((article: Article, index: number) => (
-                        <article
-                          key={`${article.url}-${index}`}
-                          className="group rounded-[22px] border border-white/10 bg-black/30 p-5 transition hover:border-white/20 hover:bg-black/40"
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <h3 className="text-lg font-semibold leading-8 text-white md:text-xl">
-                              {article.title}
+                    {topicGroups[openCategory].map((topic, index) => (
+                      <article
+                        key={topic.id || `${openCategory}-${index}`}
+                        className="rounded-[22px] border border-white/10 bg-black/30 p-5 transition hover:border-white/20 hover:bg-black/40"
+                      >
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
+                              Topic {index + 1}
+                            </p>
+                            <h3 className="mt-2 text-xl font-semibold leading-8 text-white md:text-2xl">
+                              {topic.title}
                             </h3>
-                            <div className="hidden rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-400 md:block">
-                              #{index + 1}
-                            </div>
                           </div>
-            
-                          <p className="mt-3 text-sm leading-7 text-zinc-300 md:text-base">
-                            {article.description || "無摘要"}
-                          </p>
-            
-                          <div className="mt-5 flex flex-col gap-3 text-sm md:flex-row md:items-center md:justify-between">
-                            <span className="text-zinc-500">來源：{article.source}</span>
-                            <a
-                              href={article.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-2 font-medium text-blue-400 transition hover:text-blue-300"
+                          <div className="w-fit rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-400">
+                            {topic.articles.length} 篇來源
+                          </div>
+                        </div>
+
+                        <MarkdownText
+                          text={topic.summary}
+                          className="mt-4 text-sm leading-7 text-zinc-200 md:text-base"
+                        />
+
+                        <div className="mt-5 grid gap-3">
+                          {topic.articles.map((article, articleIndex) => (
+                            <div
+                              key={`${article.url}-${articleIndex}`}
+                              className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
                             >
-                              查看原文
-                              <span aria-hidden="true">↗</span>
-                            </a>
-                          </div>
-                        </article>
-                      ))}
+                              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                  <h4 className="text-base font-semibold leading-7 text-white">
+                                    {article.title}
+                                  </h4>
+                                  <MarkdownText
+                                    text={
+                                      article.aiSummary ||
+                                      article.description ||
+                                      "此篇新聞暫無摘要。"
+                                    }
+                                    className="mt-2 text-sm leading-7 text-zinc-300"
+                                  />
+                                </div>
+                                <a
+                                  href={article.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="shrink-0 text-sm font-medium text-blue-400 transition hover:text-blue-300"
+                                >
+                                  閱讀原文
+                                </a>
+                              </div>
+
+                              <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-500">
+                                <span>來源：{article.source}</span>
+                                {article.publishedAt && (
+                                  <span>時間：{article.publishedAt}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
                   </div>
                 </section>
               )}

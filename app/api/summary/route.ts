@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { fetchDailyNews } from "@/lib/news";
-import { summarizeAllNews } from "@/lib/summarize";
+import { reviewAndGroupNews, summarizeAllNews } from "@/lib/summarize";
 
 export async function GET() {
   try {
     const news = await fetchDailyNews();
-    const { summaries, dailySummary } = await summarizeAllNews(news);
+    const reviewedNews = await reviewAndGroupNews(news);
+    const { summaries, dailySummary } = await summarizeAllNews(reviewedNews);
 
     return NextResponse.json({
       success: true,
       date: new Date().toISOString(),
       dailySummary,
       summaries,
-      news,
+      news: reviewedNews,
     });
   } catch (error) {
     console.error(error);
