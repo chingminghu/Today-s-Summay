@@ -24,28 +24,10 @@ const REQUEST_DELAY_MS = Number.parseInt(
 const RETRY_DELAYS_MS = [3000, 8000, 15000];
 
 const categoryLabels: Record<CategoryKey, string> = {
-  nation: "\u53f0\u7063\u8981\u805e",
-  sports: "\u9ad4\u80b2",
-  business: "\u8ca1\u7d93",
-  technology: "\u79d1\u6280",
-};
-
-type GeminiErrorLike = {
-  status?: number;
-  message?: string;
-};
-
-type ReviewTopicOutput = {
-  title?: string;
-  summary?: string;
-  articles?: {
-    index?: number;
-    summary?: string;
-  }[];
-};
-
-type ReviewOutput = {
-  topics?: ReviewTopicOutput[];
+  nation: "台灣政治／社會",
+  sports: "體育",
+  business: "財經",
+  technology: "科技",
 };
 
 function sleep(ms: number): Promise<void> {
@@ -322,13 +304,7 @@ export async function summarizeAllNews(news: ReviewedCategorizedNews) {
   const summaries = {} as Record<CategoryKey, string>;
 
   for (const category of categories) {
-    const articleCount = news[category].reduce(
-      (count, topic) => count + topic.articles.length,
-      0
-    );
-    console.log(
-      `Summarizing category: ${category} with ${articleCount} reviewed articles across ${news[category].length} topics...`
-    );
+    console.log(`Summarizing category: ${category} with ${news[category].length} articles...`);
     summaries[category] = await summarizeCategory(category, news[category]);
   }
 

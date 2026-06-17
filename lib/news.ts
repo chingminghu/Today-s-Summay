@@ -1,4 +1,5 @@
 import { CategorizedNews, CategoryKey, NewsItem } from "./types";
+import { getDaysAgoISO } from "./utils";
 
 const TOP_HEADLINES_URL = "https://gnews.io/api/v4/top-headlines";
 const SEARCH_URL = "https://gnews.io/api/v4/search";
@@ -322,12 +323,7 @@ async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
 }
 
 export async function fetchDailyNews(): Promise<CategorizedNews> {
-  const result: CategorizedNews = {
-    nation: [],
-    sports: [],
-    business: [],
-    technology: [],
-  };
+  const result: CategorizedNews = {};
 
   for (const category of categories) {
     try {
