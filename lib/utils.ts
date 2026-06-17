@@ -1,22 +1,22 @@
-import {CategoryKey} from "./types";
+import { CategoryKey } from "./types";
 
 export const categoryLabels: Record<CategoryKey, string> = {
-    nation: "台灣",
-    world: "國際",
-    sports: "體育",
-    business: "財經",
-    technology: "科技",
-    entertainment: "娛樂"
+  nation: "\u53f0\u7063\u8981\u805e",
+  world: "\u570b\u969b",
+  sports: "\u9ad4\u80b2",
+  business: "\u8ca1\u7d93",
+  technology: "\u79d1\u6280",
+  entertainment: "\u5a1b\u6a02",
 };
 
 export function getHoursDiffFromNow(dateString: string): number {
-    const targetDate = new Date(dateString);
-    const now = new Date();
+  const targetDate = new Date(dateString);
+  const now = new Date();
 
-    const diffInMs = now.getTime() - targetDate.getTime();
-    const diffInHours = diffInMs / (1000 * 60 * 60);
+  const diffInMs = now.getTime() - targetDate.getTime();
+  const diffInHours = diffInMs / (1000 * 60 * 60);
 
-    return parseFloat(diffInHours.toFixed(1));
+  return Number.parseFloat(diffInHours.toFixed(1));
 }
 
 export function getDaysAgoISO(days: number = 1): string {

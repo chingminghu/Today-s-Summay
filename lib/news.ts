@@ -15,9 +15,10 @@ const GNEWS_RATE_LIMIT_RETRY_DELAY_MS = Number.parseInt(
   10
 );
 
-const categories: CategoryKey[] = ["nation", "sports", "business", "technology"];
+const categories = ["nation", "sports", "business", "technology"] as const satisfies CategoryKey[];
+type ActiveCategoryKey = (typeof categories)[number];
 
-const gnewsSearchQueries: Record<CategoryKey, string> = {
+const gnewsSearchQueries: Record<ActiveCategoryKey, string> = {
   nation:
     "\u53f0\u7063 OR \u653f\u6cbb OR \u793e\u6703 OR \u6c11\u751f OR \u7acb\u6cd5\u9662",
   sports:
@@ -28,7 +29,7 @@ const gnewsSearchQueries: Record<CategoryKey, string> = {
     "\u53f0\u7063 OR \u79d1\u6280 OR \u534a\u5c0e\u9ad4 OR AI OR \u53f0\u7a4d\u96fb",
 };
 
-const googleNewsRssQueries: Record<CategoryKey, string> = {
+const googleNewsRssQueries: Record<ActiveCategoryKey, string> = {
   nation:
     "\u53f0\u7063 \u653f\u6cbb OR \u53f0\u7063 \u793e\u6703 OR \u53f0\u7063 \u6c11\u751f",
   sports:
@@ -78,13 +79,6 @@ async function waitForGNewsSlot(): Promise<void> {
 
 function isRateLimitError(error: unknown): boolean {
   return error instanceof GNewsRequestError && error.status === 429;
-}
-
-function getDaysAgoISO(days: number = 1): string {
-  const now = new Date();
-  const past = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-
-  return past.toISOString(); // e.g. 2026-04-11T10:00:00Z
 }
 
 function normalizeArticle(
@@ -196,7 +190,7 @@ function dedupeArticles(articles: NewsItem[]): NewsItem[] {
 }
 
 async function fetchTopHeadlines(
-  category: CategoryKey,
+  category: ActiveCategoryKey,
   apiKey: string
 ): Promise<NewsItem[]> {
   const url = new URL(TOP_HEADLINES_URL);
@@ -210,7 +204,7 @@ async function fetchTopHeadlines(
   return fetchGNews(url, category, "top headlines");
 }
 
-async function fetchGoogleNewsRss(category: CategoryKey): Promise<NewsItem[]> {
+async function fetchGoogleNewsRss(category: ActiveCategoryKey): Promise<NewsItem[]> {
   const url = new URL(GOOGLE_NEWS_RSS_URL);
   url.searchParams.set("q", googleNewsRssQueries[category]);
   url.searchParams.set("hl", "zh-TW");
@@ -253,7 +247,7 @@ async function fetchGoogleNewsRss(category: CategoryKey): Promise<NewsItem[]> {
 }
 
 async function fetchSearchFallback(
-  category: CategoryKey,
+  category: ActiveCategoryKey,
   apiKey: string
 ): Promise<NewsItem[]> {
   const url = new URL(SEARCH_URL);
@@ -268,7 +262,7 @@ async function fetchSearchFallback(
   return fetchGNews(url, category, "search fallback");
 }
 
-async function fetchCategoryNews(category: CategoryKey): Promise<NewsItem[]> {
+async function fetchCategoryNews(category: ActiveCategoryKey): Promise<NewsItem[]> {
   const apiKey = process.env.GNEWS_API_KEY;
 
   if (!apiKey) {

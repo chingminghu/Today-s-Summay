@@ -9,7 +9,7 @@ export type NewsItem = {
   category: CategoryKey;
 };
 
-export type CategorizedNews = Record<CategoryKey, NewsItem[]>;
+export type CategorizedNews = Partial<Record<CategoryKey, NewsItem[]>>;
 
 export type ReviewedNewsItem = NewsItem & {
   aiSummary: string;
@@ -22,4 +22,4 @@ export type NewsTopic = {
   articles: ReviewedNewsItem[];
 };
 
-export type ReviewedCategorizedNews = Record<CategoryKey, NewsTopic[]>;
+export type ReviewedCategorizedNews = Partial<Record<CategoryKey, NewsTopic[]>>;

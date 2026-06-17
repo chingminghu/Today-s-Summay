@@ -1,20 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "今日新聞摘要",
-  description: "台灣每日新聞摘要與小主題整理",
+  title: "\u4eca\u65e5\u65b0\u805e\u6458\u8981",
+  description: "\u53f0\u7063\u6bcf\u65e5\u65b0\u805e\u6458\u8981\u8207\u5c0f\u4e3b\u984c\u6574\u7406",
 };
 
 export default function RootLayout({
@@ -24,11 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-Hant">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} bg-black text-white antialiased`}
-      >
-        {children}
-      </body>
+      <body className="bg-black text-white antialiased">{children}</body>
     </html>
   );
 }

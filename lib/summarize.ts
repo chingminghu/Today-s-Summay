@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { categoryLabels } from "./utils";
 import {
   CategorizedNews,
   CategoryKey,
@@ -23,11 +24,22 @@ const REQUEST_DELAY_MS = Number.parseInt(
 );
 const RETRY_DELAYS_MS = [3000, 8000, 15000];
 
-const categoryLabels: Record<CategoryKey, string> = {
-  nation: "台灣政治／社會",
-  sports: "體育",
-  business: "財經",
-  technology: "科技",
+type GeminiErrorLike = {
+  status?: number;
+  message?: string;
+};
+
+type ReviewTopicOutput = {
+  title?: string;
+  summary?: string;
+  articles?: {
+    index?: number;
+    summary?: string;
+  }[];
+};
+
+type ReviewOutput = {
+  topics?: ReviewTopicOutput[];
 };
 
 function sleep(ms: number): Promise<void> {
@@ -232,17 +244,11 @@ async function reviewCategoryNews(
 export async function reviewAndGroupNews(
   news: CategorizedNews
 ): Promise<ReviewedCategorizedNews> {
-  const result: ReviewedCategorizedNews = {
-    nation: [],
-    sports: [],
-    business: [],
-    technology: [],
-  };
-
+  const result: ReviewedCategorizedNews = {};
   const categories = Object.keys(news) as CategoryKey[];
 
   for (const category of categories) {
-    result[category] = await reviewCategoryNews(category, news[category]);
+    result[category] = await reviewCategoryNews(category, news[category] ?? []);
   }
 
   return result;
@@ -301,16 +307,17 @@ async function summarizeCategory(
 
 export async function summarizeAllNews(news: ReviewedCategorizedNews) {
   const categories = Object.keys(news) as CategoryKey[];
-  const summaries = {} as Record<CategoryKey, string>;
+  const summaries: Partial<Record<CategoryKey, string>> = {};
 
   for (const category of categories) {
-    console.log(`Summarizing category: ${category} with ${news[category].length} articles...`);
-    summaries[category] = await summarizeCategory(category, news[category]);
+    const topics = news[category] ?? [];
+    console.log(`Summarizing category: ${category} with ${topics.length} topics...`);
+    summaries[category] = await summarizeCategory(category, topics);
   }
 
   const combinedInput = categories
     .map((category) => {
-      return `${categoryLabels[category]}\u6458\u8981\uff1a\n${summaries[category]}`;
+      return `${categoryLabels[category]}\u6458\u8981\uff1a\n${summaries[category] ?? ""}`;
     })
     .join("\n\n");
 

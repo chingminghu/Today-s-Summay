@@ -4,7 +4,7 @@ import { CategoryKey, ReviewedCategorizedNews } from "./types";
 type SaveDigestInput = {
   digestDate: string;
   dailySummary: string;
-  summaries: Record<CategoryKey, string>;
+  summaries: Partial<Record<CategoryKey, string>>;
   news: ReviewedCategorizedNews;
 };
 
@@ -20,19 +20,19 @@ export async function saveDailyDigest(input: SaveDigestInput) {
     where: { digestDate },
     update: {
       dailySummary,
-      nationSummary: summaries.nation,
-      sportsSummary: summaries.sports,
-      businessSummary: summaries.business,
-      technologySummary: summaries.technology,
+      nationSummary: summaries.nation ?? "",
+      sportsSummary: summaries.sports ?? "",
+      businessSummary: summaries.business ?? "",
+      technologySummary: summaries.technology ?? "",
       rawNewsJson: JSON.stringify(news),
     },
     create: {
       digestDate,
       dailySummary,
-      nationSummary: summaries.nation,
-      sportsSummary: summaries.sports,
-      businessSummary: summaries.business,
-      technologySummary: summaries.technology,
+      nationSummary: summaries.nation ?? "",
+      sportsSummary: summaries.sports ?? "",
+      businessSummary: summaries.business ?? "",
+      technologySummary: summaries.technology ?? "",
       rawNewsJson: JSON.stringify(news),
     },
   });
