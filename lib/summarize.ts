@@ -23,7 +23,14 @@ const REQUEST_DELAY_MS = Number.parseInt(
   process.env.GEMINI_REQUEST_DELAY_MS ?? "2000",
   10
 );
-const RETRY_DELAYS_MS = [3000, 8000, 15000];
+const DEFAULT_RETRY_DELAYS_MS = [3000, 8000, 15000, 30000, 60000, 90000];
+const RETRY_DELAYS_MS = (
+  process.env.GEMINI_RETRY_DELAYS_MS
+    ? process.env.GEMINI_RETRY_DELAYS_MS.split(",").map((delay) =>
+        Number.parseInt(delay.trim(), 10)
+      )
+    : DEFAULT_RETRY_DELAYS_MS
+).filter((delay) => Number.isFinite(delay) && delay > 0);
 const ARTICLE_FETCH_TIMEOUT_MS = Number.parseInt(
   process.env.ARTICLE_FETCH_TIMEOUT_MS ?? "12000",
   10
@@ -47,7 +54,6 @@ type ReviewTopicOutput = {
   summary?: string;
   articles?: {
     index?: number;
-    summary?: string;
   }[];
 };
 
@@ -193,15 +199,13 @@ async function fetchArticleContent(url: string): Promise<{
   }
 }
 
-type TopicArticleContent = {
-  article: ReviewedNewsItem;
+type ArticleContent = {
+  article: NewsItem;
   text: string;
 };
 
-function buildTopicSummaryPrompt(
-  topic: NewsTopic,
-  articleContents: TopicArticleContent[]
-): string {
+function buildReviewPrompt(category: CategoryKey, articleContents: ArticleContent[]): string {
+  const label = categoryLabels[category];
   let usedChars = 0;
   const articleTextParts: string[] = [];
 
@@ -212,11 +216,12 @@ function buildTopicSummaryPrompt(
     const trimmedText = text.slice(0, remaining);
     usedChars += trimmedText.length;
 
-    articleTextParts.push(`${articleTextParts.length + 1}. ${article.title}
+    articleTextParts.push(`Index: ${articleTextParts.length + 1}
+Title: ${article.title}
 Source: ${article.source}
 Published at: ${article.publishedAt || "Unknown"}
 URL: ${article.url}
-Original description: ${article.description || "None"}
+Description: ${article.description || "None"}
 Article text:
 ${trimmedText}`);
   }
@@ -224,95 +229,64 @@ ${trimmedText}`);
   const articleText = articleTextParts.join("\n\n---\n\n");
 
   return `
-You are writing the summary for one grouped news topic in a Taiwan daily digest.
+You are reviewing candidate news articles for the "${label}" section of a Taiwan daily news digest.
 
-Read the article text below and rewrite the topic summary in Traditional Chinese.
+Tasks:
+1. Read the article text for each candidate article.
+2. Remove low-quality, vague, spammy, stale, or off-topic articles.
+3. Group articles that refer to the same underlying event into one topic.
+4. Write a Traditional Chinese title for each topic.
+5. Write one Traditional Chinese topic summary based on the article text in that topic.
+6. Prefer concrete Taiwan-relevant news. Do not invent facts not present in the article text or metadata.
+7. The topic summary may use light Markdown when helpful, especially **bold** for key names or numbers.
 
-Requirements:
-1. Synthesize the shared event across the articles instead of listing each article.
-2. Use only facts supported by the article text or provided metadata.
-3. Keep it under 100 Chinese characters.
-4. Neutral, concise, news-editor tone.
-5. You may use light Markdown, especially **bold** for important names or numbers.
-6. Output only the summary, no title.
+Return only valid JSON in this exact shape:
+{
+  "topics": [
+    {
+      "title": "Traditional Chinese topic title, 10-24 characters",
+      "summary": "Traditional Chinese topic summary, around 100-150 Chinese characters, light Markdown allowed",
+      "articles": [
+        {
+          "index": 1
+        }
+      ]
+    }
+  ]
+}
 
-Current topic title: ${topic.title}
-Current topic summary: ${topic.summary}
-
-Articles:
+Candidate articles:
 ${articleText}
 `;
 }
 
-async function summarizeTopicFromArticleBodies(topic: NewsTopic): Promise<NewsTopic> {
-  const articleContents: TopicArticleContent[] = [];
-  const articles: ReviewedNewsItem[] = [];
+async function fetchArticlesForReview(articles: NewsItem[]): Promise<ArticleContent[]> {
+  const articleContents: ArticleContent[] = [];
 
-  for (const article of topic.articles) {
+  for (const article of articles) {
     try {
-      console.log(`Fetching article body for topic summary: ${article.title}`);
+      console.log(`Fetching article body for review: ${article.title}`);
       const { finalUrl, text } = await fetchArticleContent(article.url);
       const updatedArticle = {
         ...article,
         url: finalUrl,
       };
 
-      articles.push(updatedArticle);
-
-      if (text) {
-        articleContents.push({
-          article: updatedArticle,
-          text,
-        });
-      }
+      articleContents.push({
+        article: updatedArticle,
+        text: text || article.description || article.title,
+      });
     } catch (error) {
       console.error(`Fetch article body failed: ${article.url}`, error);
-      articles.push(article);
+
+      articleContents.push({
+        article,
+        text: article.description || article.title,
+      });
     }
   }
 
-  if (articleContents.length === 0) {
-    return {
-      ...topic,
-      articles,
-    };
-  }
-
-  try {
-    const summary = await generateTextWithRetry(
-      buildTopicSummaryPrompt(
-        {
-          ...topic,
-          articles,
-        },
-        articleContents
-      ),
-      `${topic.id} topic body summary`
-    );
-
-    return {
-      ...topic,
-      summary: summary || topic.summary,
-      articles,
-    };
-  } catch (error) {
-    console.error(`Summarize topic from article bodies failed: ${topic.id}`, error);
-
-    return {
-      ...topic,
-      articles,
-    };
-  }
-}
-
-async function summarizeTopicsFromArticleBodies(topics: NewsTopic[]): Promise<NewsTopic[]> {
-  const summarizedTopics: NewsTopic[] = [];
-
-  for (const topic of topics) {
-    summarizedTopics.push(await summarizeTopicFromArticleBodies(topic));
-  }
-
-  return summarizedTopics;
+  return articleContents;
 }
 
 function fallbackSummary(article: NewsItem): string {
@@ -328,64 +302,14 @@ function fallbackReviewCategory(
     title: article.title,
     summary: fallbackSummary(article),
     articles: [
-      {
-        ...article,
-        aiSummary: fallbackSummary(article),
-      },
+      article,
     ],
   }));
 }
 
-function buildReviewPrompt(category: CategoryKey, articles: NewsItem[]): string {
-  const label = categoryLabels[category];
-  const articleText = articles
-    .map((article, index) => {
-      return [
-        `Index: ${index + 1}`,
-        `Title: ${article.title}`,
-        `Description: ${article.description || "None"}`,
-        `Source: ${article.source}`,
-        `Published at: ${article.publishedAt || "Unknown"}`,
-        `URL: ${article.url}`,
-      ].join("\n");
-    })
-    .join("\n\n---\n\n");
-
-  return `
-You are reviewing candidate news articles for the "${label}" section of a Taiwan daily news digest.
-
-Tasks:
-1. Remove low-quality, vague, spammy, stale, or off-topic articles.
-2. Write a Traditional Chinese summary for each kept article. This summary will appear under the article title on the website.
-3. Group articles that refer to the same underlying event into one topic.
-4. When two or more articles refer to the same event, refine the topic summary using all included articles and keep all article references under that topic.
-5. Prefer concrete Taiwan-relevant news. Do not invent facts not present in the article data.
-6. Summaries may use light Markdown when helpful, especially **bold** for key names or numbers. Do not use headings in JSON summary fields.
-
-Return only valid JSON in this exact shape:
-{
-  "topics": [
-    {
-      "title": "Traditional Chinese topic title, 10-24 characters",
-      "summary": "Traditional Chinese topic summary, 60-120 characters, light Markdown allowed",
-      "articles": [
-        {
-          "index": 1,
-          "summary": "Traditional Chinese article summary, 40-90 characters, light Markdown allowed"
-        }
-      ]
-    }
-  ]
-}
-
-Candidate articles:
-${articleText}
-`;
-}
-
 function normalizeReviewOutput(
   category: CategoryKey,
-  articles: NewsItem[],
+  articleContents: ArticleContent[],
   output: ReviewOutput
 ): NewsTopic[] {
   const usedIndexes = new Set<number>();
@@ -395,16 +319,13 @@ function normalizeReviewOutput(
       const reviewedArticles = (topic.articles ?? [])
         .map((item): ReviewedNewsItem | null => {
           const articleIndex = Number(item.index) - 1;
-          const article = articles[articleIndex];
+          const article = articleContents[articleIndex]?.article;
 
           if (!article || usedIndexes.has(articleIndex)) return null;
 
           usedIndexes.add(articleIndex);
 
-          return {
-            ...article,
-            aiSummary: String(item.summary || fallbackSummary(article)).trim(),
-          };
+          return article;
         })
         .filter(Boolean) as ReviewedNewsItem[];
 
@@ -413,13 +334,18 @@ function normalizeReviewOutput(
       return {
         id: `${category}-${topicIndex + 1}`,
         title: String(topic.title || reviewedArticles[0].title).trim(),
-        summary: String(topic.summary || reviewedArticles[0].aiSummary).trim(),
+        summary: String(topic.summary || fallbackSummary(reviewedArticles[0])).trim(),
         articles: reviewedArticles,
       };
     })
     .filter(Boolean) as NewsTopic[];
 
-  return topics.length > 0 ? topics : fallbackReviewCategory(category, articles);
+  return topics.length > 0
+    ? topics
+    : fallbackReviewCategory(
+        category,
+        articleContents.map(({ article }) => article)
+      );
 }
 
 async function reviewCategoryNews(
@@ -430,15 +356,16 @@ async function reviewCategoryNews(
 
   try {
     console.log(`Reviewing category: ${category} with ${articles.length} articles...`);
+    const articleContents = await fetchArticlesForReview(articles);
     const output = await generateJsonWithRetry<ReviewOutput>(
-      buildReviewPrompt(category, articles),
+      buildReviewPrompt(category, articleContents),
       `${category} review`
     );
 
-    return summarizeTopicsFromArticleBodies(normalizeReviewOutput(category, articles, output));
+    return normalizeReviewOutput(category, articleContents, output);
   } catch (error) {
     console.error(`Review category failed: ${category}`, error);
-    return summarizeTopicsFromArticleBodies(fallbackReviewCategory(category, articles));
+    return fallbackReviewCategory(category, articles);
   }
 }
 
@@ -461,7 +388,7 @@ function buildCategorySummaryPrompt(category: CategoryKey, topics: NewsTopic[]) 
   const topicText = topics
     .map((topic, index) => {
       const articleText = topic.articles
-        .map((article) => `- ${article.source}: ${article.aiSummary}`)
+        .map((article) => `- ${article.source}: ${article.description || article.title}`)
         .join("\n");
 
       return `${index + 1}. ${topic.title}
@@ -477,7 +404,7 @@ You are a professional news editor. Based on the reviewed "${label}" topics belo
 Requirements:
 1. Focus on the most important events, impact, and possible follow-up.
 2. Do not invent facts not present in the topic summaries.
-3. Length: 140-220 Chinese characters.
+3. Length: 160-240 Chinese characters.
 4. Neutral, concise, suitable for a daily digest.
 5. You may use light Markdown when it improves readability, such as **bold** for important entities or numbers.
 6. Output one concise section summary. No title.
@@ -530,7 +457,7 @@ export async function summarizeAllNews(news: ReviewedCategorizedNews) {
 Based on the following section summaries, write a slightly more detailed Traditional Chinese "today overview" for the top of the page.
 
 Requirements:
-1. 120-180 Chinese characters.
+1. 150-220 Chinese characters.
 2. Focus on the most important changes, shared themes, and why they matter.
 3. Concise, neutral, editorial tone.
 4. You may use light Markdown when it improves readability, such as **bold** for important entities, numbers, or themes.

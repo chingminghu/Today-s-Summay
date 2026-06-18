@@ -17,7 +17,6 @@ type Article = {
   source: string;
   publishedAt: string;
   category: CategoryKey;
-  aiSummary?: string;
 };
 
 type NewsTopic = {
@@ -88,13 +87,8 @@ function normalizeTopics(category: CategoryKey, rawNewsJson: RawNewsJson): NewsT
   return (items as Article[]).map((article, index) => ({
     id: `${category}-${index + 1}`,
     title: article.title,
-    summary: article.aiSummary || article.description || "此篇新聞暫無摘要。",
-    articles: [
-      {
-        ...article,
-        aiSummary: article.aiSummary || article.description || "此篇新聞暫無摘要。",
-      },
-    ],
+    summary: article.description || article.title,
+    articles: [article],
   }));
 }
 
@@ -161,7 +155,7 @@ function MarkdownText({
         }
 
         return (
-          <p key={blockIndex} className={blockIndex > 0 ? "mt-3" : undefined}>
+          <p key={blockIndex} className={blockIndex > 0 ? "mt-4" : undefined}>
             {renderInlineMarkdown(lines.join(" "))}
           </p>
         );
@@ -286,7 +280,7 @@ export default function DigestPage() {
           </section>
         ) : (
           <>
-            <section className="relative mb-10 overflow-hidden rounded-[32px] border border-white/10 bg-white/8 p-8 shadow-2xl backdrop-blur md:p-10">
+            <section className="relative mx-auto mb-10 max-w-5xl overflow-hidden rounded-[28px] border border-white/10 bg-white/8 p-6 shadow-2xl backdrop-blur md:p-8 lg:p-10">
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent" />
               <div className="relative">
                 <div className="mb-4 flex items-center gap-3">
@@ -301,7 +295,7 @@ export default function DigestPage() {
 
                 <MarkdownText
                   text={digest.dailySummary}
-                  className="mt-5 max-w-4xl text-base leading-8 text-zinc-100 md:text-lg"
+                  className="mt-5 max-w-[950px] break-words text-base leading-8 text-zinc-100 [text-wrap:pretty] md:text-[17px] md:leading-9"
                 />
               </div>
             </section>
@@ -429,14 +423,6 @@ export default function DigestPage() {
                                   <h4 className="text-base font-semibold leading-7 text-white">
                                     {article.title}
                                   </h4>
-                                  <MarkdownText
-                                    text={
-                                      article.aiSummary ||
-                                      article.description ||
-                                      "此篇新聞暫無摘要。"
-                                    }
-                                    className="mt-2 text-sm leading-7 text-zinc-300"
-                                  />
                                 </div>
                                 <a
                                   href={article.url}

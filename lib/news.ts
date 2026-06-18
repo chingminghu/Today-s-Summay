@@ -4,8 +4,11 @@ import { getDaysAgoISO, sleep } from "./utils";
 const TOP_HEADLINES_URL = "https://gnews.io/api/v4/top-headlines";
 const SEARCH_URL = "https://gnews.io/api/v4/search";
 const GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search";
-const MIN_ARTICLES_PER_CATEGORY = 8;
-const MAX_ARTICLES_PER_CATEGORY = 10;
+const FINAL_ARTICLES_PER_CATEGORY = 15;
+const GNEWS_ARTICLES_PER_REQUEST = Number.parseInt(
+  process.env.GNEWS_ARTICLES_PER_REQUEST ?? "20",
+  10
+);
 const GNEWS_REQUEST_DELAY_MS = Number.parseInt(
   process.env.GNEWS_REQUEST_DELAY_MS ?? "5000",
   10
@@ -193,7 +196,7 @@ async function fetchTopHeadlines(
   url.searchParams.set("country", "tw");
   url.searchParams.set("lang", "zh");
   url.searchParams.set("category", category);
-  url.searchParams.set("max", String(MAX_ARTICLES_PER_CATEGORY));
+  url.searchParams.set("max", String(GNEWS_ARTICLES_PER_REQUEST));
   url.searchParams.set("from", getDaysAgoISO(7));
   url.searchParams.set("apikey", apiKey);
 
@@ -250,7 +253,7 @@ async function fetchSearchFallback(
   url.searchParams.set("q", gnewsSearchQueries[category]);
   url.searchParams.set("country", "tw");
   url.searchParams.set("lang", "zh");
-  url.searchParams.set("max", String(MAX_ARTICLES_PER_CATEGORY));
+  url.searchParams.set("max", String(GNEWS_ARTICLES_PER_REQUEST));
   url.searchParams.set("from", getDaysAgoISO(7));
   url.searchParams.set("sortby", "publishedAt");
   url.searchParams.set("apikey", apiKey);
@@ -265,10 +268,12 @@ async function fetchCategoryNews(category: ActiveCategoryKey): Promise<NewsItem[
     throw new Error("Missing GNEWS_API_KEY in environment variables.");
   }
 
-  let articles: NewsItem[] = [];
+  const articles: NewsItem[] = [];
 
   try {
-    articles = await fetchTopHeadlines(category, apiKey);
+    const topHeadlines = await fetchTopHeadlines(category, apiKey);
+    console.log(`${category} top headlines fetched: ${topHeadlines.length}`);
+    articles.push(...topHeadlines);
   } catch (error) {
     if (isRateLimitError(error)) {
       console.warn(`Skipping ${category} top headlines after GNews rate limit.`);
@@ -277,39 +282,34 @@ async function fetchCategoryNews(category: ActiveCategoryKey): Promise<NewsItem[
     }
   }
 
-  if (articles.length < MIN_ARTICLES_PER_CATEGORY) {
-    console.log(
-      `Only ${articles.length} ${category} headlines found; fetching Google News RSS fallback...`
-    );
+  try {
+    const rssItems = await fetchGoogleNewsRss(category);
+    console.log(`${category} Google News RSS fetched: ${rssItems.length}`);
+    articles.push(...rssItems);
+  } catch (error) {
+    console.error(`Fetch ${category} Google News RSS failed:`, error);
+  }
 
-    try {
-      const rssItems = await fetchGoogleNewsRss(category);
-      articles = dedupeArticles([...articles, ...rssItems]);
-    } catch (error) {
-      console.error(`Fetch ${category} Google News RSS failed:`, error);
+  try {
+    const gnewsSearchItems = await fetchSearchFallback(category, apiKey);
+    console.log(`${category} GNews search fetched: ${gnewsSearchItems.length}`);
+    articles.push(...gnewsSearchItems);
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      console.warn(
+        `Keeping ${articles.length} ${category} articles after GNews search rate limit.`
+      );
+    } else {
+      throw error;
     }
   }
 
-  if (articles.length < MIN_ARTICLES_PER_CATEGORY) {
-    console.log(
-      `Only ${articles.length} ${category} articles found; fetching GNews search fallback...`
-    );
+  const dedupedArticles = dedupeArticles(articles);
+  console.log(
+    `${category} total unique articles fetched: ${dedupedArticles.length}; using first ${FINAL_ARTICLES_PER_CATEGORY}.`
+  );
 
-    try {
-      const gnewsSearchItems = await fetchSearchFallback(category, apiKey);
-      articles = dedupeArticles([...articles, ...gnewsSearchItems]);
-    } catch (error) {
-      if (isRateLimitError(error)) {
-        console.warn(
-          `Keeping ${articles.length} ${category} articles after GNews search rate limit.`
-        );
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  return dedupeArticles(articles).slice(0, MAX_ARTICLES_PER_CATEGORY);
+  return dedupedArticles.slice(0, FINAL_ARTICLES_PER_CATEGORY);
 }
 
 export async function fetchDailyNews(): Promise<CategorizedNews> {

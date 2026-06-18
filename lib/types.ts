@@ -11,9 +11,7 @@ export type NewsItem = {
 
 export type CategorizedNews = Partial<Record<CategoryKey, NewsItem[]>>;
 
-export type ReviewedNewsItem = NewsItem & {
-  aiSummary: string;
-};
+export type ReviewedNewsItem = NewsItem;
 
 export type NewsTopic = {
   id: string;
