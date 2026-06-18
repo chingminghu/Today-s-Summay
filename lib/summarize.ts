@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { categoryLabels } from "./utils";
+import { categoryLabels, sleep } from "./utils";
 import {
   CategorizedNews,
   CategoryKey,
@@ -42,10 +42,6 @@ type ReviewOutput = {
   topics?: ReviewTopicOutput[];
 };
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function isRetryableGeminiError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
 
@@ -74,7 +70,7 @@ async function generateTextWithRetry(prompt: string, label: string): Promise<str
         contents: prompt,
       });
 
-      return response.text?.trim() || "\u672a\u53d6\u5f97\u6458\u8981\u3002";
+      return response.text?.trim() || "未取得摘要。";
     } catch (error) {
       const shouldRetry =
         attempt < RETRY_DELAYS_MS.length && isRetryableGeminiError(error);
@@ -92,7 +88,7 @@ async function generateTextWithRetry(prompt: string, label: string): Promise<str
     }
   }
 
-  return "\u672a\u53d6\u5f97\u6458\u8981\u3002";
+  return "未取得摘要。";
 }
 
 function extractJsonObject(text: string): string {
@@ -291,7 +287,7 @@ async function summarizeCategory(
   topics: NewsTopic[]
 ): Promise<string> {
   if (topics.length === 0) {
-    return "\u4eca\u5929\u6b64\u5206\u985e\u66ab\u7121\u53ef\u7528\u65b0\u805e\u8cc7\u6599\u3002";
+    return "今天此分類暫無可用新聞資料。";
   }
 
   try {
@@ -301,7 +297,7 @@ async function summarizeCategory(
     );
   } catch (error) {
     console.error(`Summarize category failed: ${category}`, error);
-    return "\u6b64\u5206\u985e\u6458\u8981\u76ee\u524d\u7121\u6cd5\u7522\u751f\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002";
+    return "此分類摘要目前無法產生，請稍後再試。";
   }
 }
 
@@ -317,7 +313,7 @@ export async function summarizeAllNews(news: ReviewedCategorizedNews) {
 
   const combinedInput = categories
     .map((category) => {
-      return `${categoryLabels[category]}\u6458\u8981\uff1a\n${summaries[category] ?? ""}`;
+      return `${categoryLabels[category]}摘要：\n${summaries[category] ?? ""}`;
     })
     .join("\n\n");
 
@@ -350,7 +346,7 @@ ${combinedInput}
     return {
       summaries,
       dailySummary:
-        "\u4eca\u65e5\u6458\u8981\u5df2\u6574\u7406\u5404\u5206\u985e\u91cd\u9ede\uff0c\u4f46\u6574\u9ad4\u65b0\u805e\u91cd\u9ede\u76ee\u524d\u7121\u6cd5\u7522\u751f\u3002",
+        "今日摘要已整理各分類重點，但整體新聞重點目前無法產生。",
     };
   }
 }

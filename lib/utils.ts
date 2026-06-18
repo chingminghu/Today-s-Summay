@@ -1,12 +1,12 @@
 import { CategoryKey } from "./types";
 
 export const categoryLabels: Record<CategoryKey, string> = {
-  nation: "\u53f0\u7063\u8981\u805e",
-  world: "\u570b\u969b",
-  sports: "\u9ad4\u80b2",
-  business: "\u8ca1\u7d93",
-  technology: "\u79d1\u6280",
-  entertainment: "\u5a1b\u6a02",
+  nation: "台灣要聞",
+  world: "國際",
+  sports: "體育",
+  business: "財經",
+  technology: "科技",
+  entertainment: "娛樂",
 };
 
 export function getHoursDiffFromNow(dateString: string): number {
@@ -24,4 +24,9 @@ export function getDaysAgoISO(days: number = 1): string {
   const past = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
   return past.toISOString(); // e.g. 2026-04-11T10:00:00Z
+}
+
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

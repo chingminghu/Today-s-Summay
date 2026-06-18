@@ -1,5 +1,5 @@
 import { CategorizedNews, CategoryKey, NewsItem } from "./types";
-import { getDaysAgoISO } from "./utils";
+import { getDaysAgoISO, sleep } from "./utils";
 
 const TOP_HEADLINES_URL = "https://gnews.io/api/v4/top-headlines";
 const SEARCH_URL = "https://gnews.io/api/v4/search";
@@ -20,24 +20,24 @@ type ActiveCategoryKey = (typeof categories)[number];
 
 const gnewsSearchQueries: Record<ActiveCategoryKey, string> = {
   nation:
-    "\u53f0\u7063 OR \u653f\u6cbb OR \u793e\u6703 OR \u6c11\u751f OR \u7acb\u6cd5\u9662",
+    "台灣 OR 政治 OR 社會 OR 民生 OR 立法院",
   sports:
-    "\u53f0\u7063 OR \u68d2\u7403 OR \u7c43\u7403 OR \u904b\u52d5 OR \u8cfd\u4e8b",
+    "台灣 OR 棒球 OR 籃球 OR 運動 OR 賽事",
   business:
-    "\u53f0\u7063 OR \u8ca1\u7d93 OR \u80a1\u5e02 OR \u7522\u696d OR \u7d93\u6fdf",
+    "台灣 OR 財經 OR 股市 OR 產業 OR 經濟",
   technology:
-    "\u53f0\u7063 OR \u79d1\u6280 OR \u534a\u5c0e\u9ad4 OR AI OR \u53f0\u7a4d\u96fb",
+    "台灣 OR 科技 OR 半導體 OR AI OR 台積電",
 };
 
 const googleNewsRssQueries: Record<ActiveCategoryKey, string> = {
   nation:
-    "\u53f0\u7063 \u653f\u6cbb OR \u53f0\u7063 \u793e\u6703 OR \u53f0\u7063 \u6c11\u751f",
+    "台灣 政治 OR 台灣 社會 OR 台灣 民生",
   sports:
-    "\u53f0\u7063 \u904b\u52d5 OR \u53f0\u7063 \u68d2\u7403 OR \u53f0\u7063 \u7c43\u7403",
+    "台灣 運動 OR 台灣 棒球 OR 台灣 籃球",
   business:
-    "\u53f0\u7063 \u8ca1\u7d93 OR \u53f0\u80a1 OR \u53f0\u7063 \u7522\u696d",
+    "台灣 財經 OR 台股 OR 台灣 產業",
   technology:
-    "\u53f0\u7063 \u79d1\u6280 OR \u53f0\u7063 \u534a\u5c0e\u9ad4 OR \u53f0\u7a4d\u96fb OR AI",
+    "台灣 科技 OR 台灣 半導體 OR 台積電 OR AI",
 };
 
 type GNewsArticle = {
@@ -61,10 +61,6 @@ class GNewsRequestError extends Error {
 }
 
 let lastGNewsRequestAt = 0;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function waitForGNewsSlot(): Promise<void> {
   const elapsed = Date.now() - lastGNewsRequestAt;
