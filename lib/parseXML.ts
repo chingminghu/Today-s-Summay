@@ -1,9 +1,10 @@
 import { CategorizedNews, CategoryKey, NewsItem } from "./types";
 import { getHoursDiffFromNow } from "./utils";
-import  JSDOM  from "jsdom";
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
 import axios from 'axios';
 import Parser from "rss-parser";
-const { GoogleDecoder } = require('google-news-url-decoder');
+const GoogleNewsDecoder = require('google-news-decoder');
 
 interface CustomItem {
     title: string;
@@ -23,36 +24,22 @@ interface CustomFeed{
 
 const parser: Parser<CustomFeed, CustomItem> = new Parser();
 
-const decoder = new GoogleDecoder();
+const urlDecoder = new GoogleNewsDecoder();
 
-// function parseDescription(dom : string): string[] {
-//     const parser = new JSDOM(dom);
-//     const document = parser.window.document;
-
-//     const anchorElements = document.querySelectorAll('ol li a');
-
-//     const links = Array.from(anchorElements).map((a) => {
-//         return (a as HTMLAnchorElement).href;
-//     });
-
-//     return links;
+// async function getFinalUrl(googleNewsUrl: string) {
+//   try {
+//     const result = decoder.decode(googleNewsUrl);
+//     if (result.status){
+//         return result.decoded_url;
+//     }
+//     else{
+//         console.error('Error:', result.message);
+//     }
+//   } catch (error) {
+//     console.error('無法解析連結:', error);
+//     return googleNewsUrl;
+//   }
 // }
-
-
-async function getFinalUrl(googleNewsUrl: string) {
-  try {
-    const result = decoder.decode(googleNewsUrl);
-    if (result.status){
-        return result.decoded_url;
-    }
-    else{
-        console.error('Error:', result.message);
-    }
-  } catch (error) {
-    console.error('無法解析連結:', error);
-    return googleNewsUrl;
-  }
-}
 
 async function parseXML(url: string, category: CategoryKey): Promise<NewsItem[]> {
     var news: NewsItem[] = [];
@@ -66,8 +53,20 @@ async function parseXML(url: string, category: CategoryKey): Promise<NewsItem[]>
 
         const item = feed.items[0];
 
+        console.log(item)
+
         // const finalURL = await getFinalUrl(item.link);
-        // console.log(`原始連結: ${item.link}，最終連結: ${finalURL}`);
+        const decodeResult = await urlDecoder.decodeGoogleNewsUrl(item.link);
+        const originalUrl = decodeResult.decodedUrl || decodeResult.unwrappedUrl || decodeResult;
+
+        console.log(`原始連結: ${item.link}，最終連結: ${originalUrl}`);
+
+        const response = await axios.get(originalUrl, { timeout: 5000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const dom = new JSDOM(response.data, { url: originalUrl });
+        const reader = new Readability(dom.window.document);
+        const article = reader.parse();
+
+        console.log(article?.textContent?.trim());
 
         news.push({
                 title: item.title,
@@ -119,8 +118,8 @@ async function pasreGoogleRSS(catagory: CategoryKey) {
         throw new Error(`Invalid category For Google RSS: ${catagory}`);
     }
 
-    //const URL = `https://news.google.com/rss/topics/${query[catagory]}?hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant`;
-    const URL = "https://technews.tw/news-rss/"
+    const URL = `https://news.google.com/rss/topics/${query[catagory]}?hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant`;
+    //const URL = "https://technews.tw/news-rss/"
 
     return await parseXML(URL, catagory);
 }

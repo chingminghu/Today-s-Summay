@@ -45,6 +45,7 @@ ${articleText}
 
 
 async function summarizeParagraph(news: NewsItem): Promise<[string, string]> {
+	console.log("Summarizing paragraph...");
 	const prompt = `
 		你是一位專業新聞編輯。請幫我閱讀這篇新聞，用繁體中文整理成一段摘要以及適合的標題。
 
