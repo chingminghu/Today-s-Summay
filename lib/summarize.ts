@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { JSDOM } from "jsdom";
 import { categoryLabels, sleep } from "./utils";
 import {
   CategorizedNews,
@@ -23,6 +24,18 @@ const REQUEST_DELAY_MS = Number.parseInt(
   10
 );
 const RETRY_DELAYS_MS = [3000, 8000, 15000];
+const ARTICLE_FETCH_TIMEOUT_MS = Number.parseInt(
+  process.env.ARTICLE_FETCH_TIMEOUT_MS ?? "12000",
+  10
+);
+const ARTICLE_TEXT_MAX_CHARS = Number.parseInt(
+  process.env.ARTICLE_TEXT_MAX_CHARS ?? "6000",
+  10
+);
+const TOPIC_ARTICLE_TEXT_TOTAL_MAX_CHARS = Number.parseInt(
+  process.env.TOPIC_ARTICLE_TEXT_TOTAL_MAX_CHARS ?? "16000",
+  10
+);
 
 type GeminiErrorLike = {
   status?: number;
@@ -108,6 +121,198 @@ async function generateJsonWithRetry<T>(prompt: string, label: string): Promise<
   const text = await generateTextWithRetry(prompt, label);
 
   return JSON.parse(extractJsonObject(text)) as T;
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function extractArticleText(html: string): string {
+  const dom = new JSDOM(html);
+  const document = dom.window.document;
+
+  document
+    .querySelectorAll("script, style, noscript, svg, iframe, header, footer, nav, aside")
+    .forEach((element) => element.remove());
+
+  const metaDescription =
+    document
+      .querySelector('meta[property="og:description"], meta[name="description"]')
+      ?.getAttribute("content") ?? "";
+  const containers = Array.from(
+    document.querySelectorAll("article, main, [role='main'], .article, .post, .content")
+  );
+  const sourceElements = containers.length > 0 ? containers : [document.body];
+  const paragraphText = sourceElements
+    .flatMap((element) => Array.from(element.querySelectorAll("p")))
+    .map((paragraph) => normalizeWhitespace(paragraph.textContent ?? ""))
+    .filter((text) => text.length >= 20)
+    .join("\n");
+
+  return normalizeWhitespace([metaDescription, paragraphText].filter(Boolean).join("\n\n"))
+    .slice(0, ARTICLE_TEXT_MAX_CHARS);
+}
+
+async function fetchArticleContent(url: string): Promise<{
+  finalUrl: string;
+  text: string;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ARTICLE_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      redirect: "follow",
+      headers: {
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; TodaySummaryBot/1.0; +https://localhost)",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Article fetch failed: ${response.status}`);
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+
+    if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
+      throw new Error(`Unsupported article content type: ${contentType || "unknown"}`);
+    }
+
+    const html = await response.text();
+
+    return {
+      finalUrl: response.url || url,
+      text: extractArticleText(html),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+type TopicArticleContent = {
+  article: ReviewedNewsItem;
+  text: string;
+};
+
+function buildTopicSummaryPrompt(
+  topic: NewsTopic,
+  articleContents: TopicArticleContent[]
+): string {
+  let usedChars = 0;
+  const articleTextParts: string[] = [];
+
+  for (const { article, text } of articleContents) {
+    const remaining = TOPIC_ARTICLE_TEXT_TOTAL_MAX_CHARS - usedChars;
+    if (remaining <= 0) break;
+
+    const trimmedText = text.slice(0, remaining);
+    usedChars += trimmedText.length;
+
+    articleTextParts.push(`${articleTextParts.length + 1}. ${article.title}
+Source: ${article.source}
+Published at: ${article.publishedAt || "Unknown"}
+URL: ${article.url}
+Original description: ${article.description || "None"}
+Article text:
+${trimmedText}`);
+  }
+
+  const articleText = articleTextParts.join("\n\n---\n\n");
+
+  return `
+You are writing the summary for one grouped news topic in a Taiwan daily digest.
+
+Read the article text below and rewrite the topic summary in Traditional Chinese.
+
+Requirements:
+1. Synthesize the shared event across the articles instead of listing each article.
+2. Use only facts supported by the article text or provided metadata.
+3. Keep it under 100 Chinese characters.
+4. Neutral, concise, news-editor tone.
+5. You may use light Markdown, especially **bold** for important names or numbers.
+6. Output only the summary, no title.
+
+Current topic title: ${topic.title}
+Current topic summary: ${topic.summary}
+
+Articles:
+${articleText}
+`;
+}
+
+async function summarizeTopicFromArticleBodies(topic: NewsTopic): Promise<NewsTopic> {
+  const articleContents: TopicArticleContent[] = [];
+  const articles: ReviewedNewsItem[] = [];
+
+  for (const article of topic.articles) {
+    try {
+      console.log(`Fetching article body for topic summary: ${article.title}`);
+      const { finalUrl, text } = await fetchArticleContent(article.url);
+      const updatedArticle = {
+        ...article,
+        url: finalUrl,
+      };
+
+      articles.push(updatedArticle);
+
+      if (text) {
+        articleContents.push({
+          article: updatedArticle,
+          text,
+        });
+      }
+    } catch (error) {
+      console.error(`Fetch article body failed: ${article.url}`, error);
+      articles.push(article);
+    }
+  }
+
+  if (articleContents.length === 0) {
+    return {
+      ...topic,
+      articles,
+    };
+  }
+
+  try {
+    const summary = await generateTextWithRetry(
+      buildTopicSummaryPrompt(
+        {
+          ...topic,
+          articles,
+        },
+        articleContents
+      ),
+      `${topic.id} topic body summary`
+    );
+
+    return {
+      ...topic,
+      summary: summary || topic.summary,
+      articles,
+    };
+  } catch (error) {
+    console.error(`Summarize topic from article bodies failed: ${topic.id}`, error);
+
+    return {
+      ...topic,
+      articles,
+    };
+  }
+}
+
+async function summarizeTopicsFromArticleBodies(topics: NewsTopic[]): Promise<NewsTopic[]> {
+  const summarizedTopics: NewsTopic[] = [];
+
+  for (const topic of topics) {
+    summarizedTopics.push(await summarizeTopicFromArticleBodies(topic));
+  }
+
+  return summarizedTopics;
 }
 
 function fallbackSummary(article: NewsItem): string {
@@ -230,10 +435,10 @@ async function reviewCategoryNews(
       `${category} review`
     );
 
-    return normalizeReviewOutput(category, articles, output);
+    return summarizeTopicsFromArticleBodies(normalizeReviewOutput(category, articles, output));
   } catch (error) {
     console.error(`Review category failed: ${category}`, error);
-    return fallbackReviewCategory(category, articles);
+    return summarizeTopicsFromArticleBodies(fallbackReviewCategory(category, articles));
   }
 }
 
